@@ -146,7 +146,7 @@ async def task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = DB.table("tasks").get(UserQ.date == today)
     if not data:
         return await update.message.reply_text("⚠️ No tasks set for today.")
-    lines = ["🎯 Today's tasks:"]
+    lines = ["🎯 𝗧𝗼𝗱𝗮𝘆'𝘀 𝗧𝗮𝘀𝗸 :"]
     for t in data["tasks"]:
         if t["type"] == "key":
             lines.append(f"🔑 Collect {t['min']}–{t['max']} keys")
