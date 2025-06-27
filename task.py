@@ -191,36 +191,69 @@ async def task(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 # === /profile ===
+# === /profile ===
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    user_name = update.effective_user.first_name
     if not DB.table("approved").contains(UserQ.id == user_id):
         return await update.message.reply_text("❌ You are not approved.")
+    
     progress = DB.table("progress").get(UserQ.id == user_id) or {}
     keys = progress.get("keys", 0)
     slugs = progress.get("slugs", {})
     limit_done = progress.get("limit_done", False)
-    lines = [f"🧾 Profile of {user_id}:", f"🔑 Keys: {keys}"]
-    for name, count in slugs.items():
-        lines.append(f"🐌 {name.capitalize()}: {count}")
-    lines.append(f"⚡ Daily Limit: {'✅' if limit_done else '❌'}")
-    await update.message.reply_text("\n".join(lines))
+    
+    lines = [
+        f"✵ Name : {user_name}",
+        f"► ID : `{user_id}`",
+        f"► Keys : {keys}",
+        f"► Slugs :"
+    ]
+    
+    if slugs:
+        for name, count in slugs.items():
+            lines.append(f"   ┗ 🐌 {name.capitalize()} : {count}")
+    else:
+        lines.append("   ┗ None")
+    
+    lines.append(f"► Daily limit : {'✅' if limit_done else '❌'}")
+    
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
+# === /get (admin check user profile) ===
 # === /get (admin check user profile) ===
 async def get(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return await update.message.reply_text("Unauthorized.")
+    
     if not update.message.reply_to_message:
         return await update.message.reply_text("❌ Reply to a user to get their profile.")
-    user_id = update.message.reply_to_message.from_user.id
+    
+    user = update.message.reply_to_message.from_user
+    user_id = user.id
+    user_name = user.first_name
+    
     progress = DB.table("progress").get(UserQ.id == user_id) or {}
     keys = progress.get("keys", 0)
     slugs = progress.get("slugs", {})
     limit_done = progress.get("limit_done", False)
-    lines = [f"🧾 Profile of {user_id}:", f"🔑 Keys: {keys}"]
-    for name, count in slugs.items():
-        lines.append(f"🐌 {name.capitalize()}: {count}")
-    lines.append(f"⚡ Daily Limit: {'✅' if limit_done else '❌'}")
-    await update.message.reply_text("\n".join(lines))
+    
+    lines = [
+        f"✵ Name : {user_name}",
+        f"► ID : `{user_id}`",
+        f"► Keys : {keys}",
+        f"► Slugs :"
+    ]
+    
+    if slugs:
+        for name, count in slugs.items():
+            lines.append(f"   ┗ 🐌 {name.capitalize()} : {count}")
+    else:
+        lines.append("   ┗ None")
+    
+    lines.append(f"► Daily limit : {'✅' if limit_done else '❌'}")
+    
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 # === /start ===
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
