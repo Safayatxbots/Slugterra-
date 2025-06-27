@@ -11,6 +11,8 @@ OWNER_ID = 6279412066
 DB = TinyDB("datta.json")
 UserQ = Query()
 
+
+
 import os
 import json
 from tinydb import TinyDB, Query
@@ -28,6 +30,13 @@ UserQ = Query()
 
 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 task_table = DB.table("tasks")
+LOG_GROUP_ID = -1002893931329
+
+REWARD_VALUES = {
+    "key": {"gems": 450, "coins": 10000},
+    "slug": {"gems": 1100, "coins": 80000},
+    "daily_limit": {"gems": 700, "coins": 30000},
+}
 
 try:
     today_task = task_table.get(UserQ.date == today)
@@ -73,6 +82,59 @@ async def on_startup(app):
     scheduler.start()
     print("🕛 Scheduler started.")
 
+
+
+async def log_task_completion(context: ContextTypes.DEFAULT_TYPE, user_id: int):
+    user = await context.bot.get_chat(user_id)
+    progress_table = DB.table("progress")
+    task_data = DB.table("tasks").get(UserQ.date == datetime.now(timezone.utc).strftime("%Y-%m-%d")) or {"tasks": []}
+    user_data = progress_table.get(UserQ.id == user_id) or {}
+    completed_before = user_data.get("completed_tasks", [])
+
+    new_completed = []
+    total_gems = 0
+    total_coins = 0
+
+    for idx, task in enumerate(task_data["tasks"], 1):
+        if str(idx) in completed_before:
+            continue  # already logged
+
+        if task["type"] == "key":
+            if user_data.get("keys", 0) >= task["min"]:
+                new_completed.append(str(idx))
+                total_gems += REWARD_VALUES["key"]["gems"]
+                total_coins += REWARD_VALUES["key"]["coins"]
+        elif task["type"] == "slug":
+            slug_count = user_data.get("slugs", {}).get(task["name"].lower(), 0)
+            if slug_count >= task["count"]:
+                new_completed.append(str(idx))
+                total_gems += REWARD_VALUES["slug"]["gems"]
+                total_coins += REWARD_VALUES["slug"]["coins"]
+        elif task["type"] == "daily_limit":
+            if user_data.get("limit_done", False):
+                new_completed.append(str(idx))
+                total_gems += REWARD_VALUES["daily_limit"]["gems"]
+                total_coins += REWARD_VALUES["daily_limit"]["coins"]
+
+    if not new_completed:
+        return  # Nothing new completed
+
+    message = (
+        f"👤 Name: {user.first_name}\n"
+        f"🆔 ID: `{user.id}`\n"
+        f"🔗 Username: @{user.username or 'N/A'}\n"
+        f"✅ Completed Tasks: {', '.join(new_completed)}\n"
+        f"💎 Gems to Send: {total_gems}\n"
+        f"🪙 Coins to Send: {total_coins}"
+    )
+
+    # Send logs
+    await context.bot.send_message(chat_id=OWNER_ID, text=message, parse_mode="Markdown")
+    await context.bot.send_message(chat_id=LOG_GROUP_ID, text=message, parse_mode="Markdown")
+
+    # Mark as completed
+    updated = list(set(completed_before + new_completed))
+    progress_table.update({"completed_tasks": updated}, UserQ.id == user_id)
 
 
 
@@ -257,6 +319,32 @@ async def get(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === /start ===
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+def reset_profiles():
+    progress_table = DB.table("progress")
+    for user in progress_table.all():
+        user_id = user["id"]
+        progress_table.update({
+            "count": 0,
+            "keys": 0,
+            "slugs": {},
+            "limit_done": False,
+            "message_ids": [],
+            "completed_tasks": []  # ← add this
+        }, UserQ.id == user_id)
+    print("✅ All user profiles reset for new day.")
+
+async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not DB.table("approved").contains(UserQ.id == user_id):
+        return await update.message.reply_text("❌ You are not approved.")
+    progress_table = DB.table("progress")
+    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id}
+    user_data["keys"] = user_data.get("keys", 0) + 1
+    progress_table.upsert(user_data, UserQ.id == user_id)
+
+    await update.message.reply_text("🔑 Key added.")
+    await log_task_completion(context, user_id)  # 👈 log check
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
