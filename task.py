@@ -236,7 +236,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    caption = "👋 Welcome to the **Rewards bot of Shane**\n\nI gives daily task 🗒️. Complete and get Rewards 💎 from Gang Admins"
+    caption = "👋 Welcome to the 𝗥𝗲𝘄𝗮𝗿𝗱𝘀 𝗼𝗳 𝗦𝗵𝗮𝗻𝗲 𝗚𝗮𝗻𝗴\n\nI gives daily task 🗒️. Complete and get Rewards 💎 from Gang Admins"
 
     await context.bot.send_photo(
         chat_id=update.effective_chat.id,
