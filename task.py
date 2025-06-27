@@ -145,6 +145,60 @@ async def unapprove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     DB.table("approved").remove(UserQ.id == user_id)
     await update.message.reply_text(f"🚫 Unapproved user `{user_id}`", parse_mode="Markdown")
 
+
+# === Message Handler for Forwarded Slugterraa Messages ===
+async def forwarded_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.message
+    user_id = message.from_user.id
+    if not is_approved(user_id):
+        return
+
+    if not message.forward_from or message.forward_from.username != "Slugterraa_bot":
+        return
+
+    date_today = datetime.now(timezone.utc).date()
+    if message.date.date() != date_today:
+        return
+
+    text = message.text or message.caption or ""
+    progress_table = DB.table("progress")
+    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id, "slugs": {}, "message_ids": []}
+    msg_ids = user_data.get("message_ids", [])
+    if message.message_id in msg_ids:
+        return
+
+    msg_ids.append(message.message_id)
+    user_data["message_ids"] = msg_ids
+
+    updated = False
+    if "found a key" in text.lower():
+        user_data["keys"] = user_data.get("keys", 0) + 1
+        updated = True
+    elif "your luck is good you got" in text.lower():
+        words = text.lower().split()
+        try:
+            name = words[words.index("got") + 1].strip(".!")
+            slugs = user_data.get("slugs", {})
+            slugs[name] = slugs.get(name, 0) + 1
+            user_data["slugs"] = slugs
+            updated = True
+        except Exception:
+            pass
+    elif "daily limit reached" in text.lower():
+        user_data["limit_done"] = True
+        updated = True
+
+    if updated:
+        progress_table.upsert(user_data, UserQ.id == user_id)
+        await log_task_completion(context, user_id)
+
+# === Attach handler to app ===
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+app.add_handler(MessageHandler(filters.FORWARDED & filters.TEXT & (~filters.COMMAND), forwarded_handler))
+
+print("🔁 Forwarded message handler added.")
+
 # === /settask1 (key task) ===
 async def settask1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
