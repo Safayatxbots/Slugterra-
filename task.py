@@ -212,7 +212,7 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if slugs:
         for name, count in slugs.items():
-            lines.append(f"   ┗ 🐌 {name.capitalize()} : {count}")
+            lines.append(f"{name.capitalize()} : {count}")
     else:
         lines.append("   ┗ None")
     
@@ -247,7 +247,7 @@ async def get(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if slugs:
         for name, count in slugs.items():
-            lines.append(f"   ┗ 🐌 {name.capitalize()} : {count}")
+            lines.append(f"{name.capitalize()} : {count}")
     else:
         lines.append("   ┗ None")
     
