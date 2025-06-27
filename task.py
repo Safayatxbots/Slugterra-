@@ -53,10 +53,8 @@ except Exception as e:
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-# Add at the top of your script (after DB setup)
 scheduler = AsyncIOScheduler()
 
-# Daily profile reset task
 def reset_profiles():
     progress_table = DB.table("progress")
     for user in progress_table.all():
@@ -70,9 +68,11 @@ def reset_profiles():
         }, UserQ.id == user_id)
     print("✅ All user profiles reset for new day.")
 
-# Start the scheduler
-scheduler.add_job(reset_profiles, "cron", hour=0, minute=0)  # Adjust time if needed
-scheduler.start()
+async def on_startup(app):
+    scheduler.add_job(reset_profiles, "cron", hour=0, minute=0)
+    scheduler.start()
+    print("🕛 Scheduler started.")
+
 
 
 
