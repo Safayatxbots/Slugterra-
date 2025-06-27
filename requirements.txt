@@ -1,0 +1,6 @@
+telethon
+python-telegram-bot==13.15
+apscheduler
+pytz
+tinydb
+unidecode
