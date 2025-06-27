@@ -249,13 +249,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # === Setup Bot ===
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("approve", approve))
-app.add_handler(CommandHandler("unapprove", unapprove))
+app.add_handler(CommandHandler("apv", approve))
+app.add_handler(CommandHandler("unapv", unapprove))
 app.add_handler(CommandHandler("settask1", settask1))
 app.add_handler(CommandHandler("settask2", settask2))
 app.add_handler(CommandHandler("settask3", settask3))
 app.add_handler(CommandHandler("task", task))
-app.add_handler(CommandHandler("profile", profile))
+app.add_handler(CommandHandler("myprofile", profile))
 app.add_handler(CommandHandler("get", get))
 
 print("🤖 Bot is running...")
