@@ -231,7 +231,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("❌ You are not approved.")
 
     keyboard = [
-        [InlineKeyboardButton("⚡ Support", url="https://t.me/YourBotUsername?start=task")],
+        [InlineKeyboardButton("⚡ Support", url="https://t.me/AshxSupport")],
         [InlineKeyboardButton("🔥 Updates", url="https://t.me/Ashxbots")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
