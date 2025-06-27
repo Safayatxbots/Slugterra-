@@ -12,6 +12,8 @@ DB = TinyDB("datta.json")
 UserQ = Query()
 
 from tinydb import where
+today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+task_table = DB.table("tasks")  # ✅ define it first
 
 try:
     today_task = task_table.get(UserQ.date == today)
@@ -21,6 +23,7 @@ except Exception as e:
     print("💥 Error reading task table:", e)
     task_table.truncate()
     today_task = {"date": today, "tasks": []}
+
 
 
 # === /approve ===
