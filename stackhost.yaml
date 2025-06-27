@@ -1,0 +1,15 @@
+user:
+  name: safayatxbots
+  github: safayatxbots
+
+language: "python"
+python_version: "3.10"
+
+commands:
+  build:
+    - "pip install -r requirements.txt"  # ✅ Correct filename: requirements.txt
+  start:
+    - "python3 task.py"                  # ✅ You don't need `package` here unless you're publishing a package
+
+env:
+  - "ENVIRONMENT=production"
