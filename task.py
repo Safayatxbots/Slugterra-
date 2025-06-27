@@ -146,6 +146,7 @@ async def unapprove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🚫 Unapproved user `{user_id}`", parse_mode="Markdown")
 
 
+
 # === Message Handler for Forwarded Slugterraa Messages ===
 async def forwarded_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -171,20 +172,20 @@ async def forwarded_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data["message_ids"] = msg_ids
 
     updated = False
-    if "found a key" in text.lower():
+    text_lower = text.lower()
+    if "you found a key" in text_lower:
         user_data["keys"] = user_data.get("keys", 0) + 1
         updated = True
-    elif "your luck is good you got" in text.lower():
-        words = text.lower().split()
+    elif "your luck is good you got" in text_lower:
         try:
-            name = words[words.index("got") + 1].strip(".!")
+            slug_name = text.split("got", 1)[1].strip().split()[0].strip(".!")
             slugs = user_data.get("slugs", {})
-            slugs[name] = slugs.get(name, 0) + 1
+            slugs[slug_name.lower()] = slugs.get(slug_name.lower(), 0) + 1
             user_data["slugs"] = slugs
             updated = True
         except Exception:
             pass
-    elif "daily limit reached" in text.lower():
+    elif "daily limit reached" in text_lower:
         user_data["limit_done"] = True
         updated = True
 
@@ -300,7 +301,7 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for name, count in slugs.items():
             lines.append(f"{name.capitalize()} : {count}")
     else:
-        lines.append("   ┗ None")
+        lines.append("None")
 
     lines.append(f"► Daily limit : {'✅' if limit_done else '❌'}")
 
@@ -335,7 +336,7 @@ async def get(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for name, count in slugs.items():
             lines.append(f"{name.capitalize()} : {count}")
     else:
-        lines.append("   ┗ None")
+        lines.append("None")
 
     lines.append(f"► Daily limit : {'✅' if limit_done else '❌'}")
 
