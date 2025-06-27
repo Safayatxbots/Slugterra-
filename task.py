@@ -147,58 +147,81 @@ async def unapprove(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-# === Message Handler for Forwarded Slugterraa Messages ===
-async def forwarded_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    user_id = message.from_user.id
-    if not is_approved(user_id):
+# === Handle Forwarded Slugterraa Messages with Hash Check ===
+async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    msg = update.message
+
+    if not msg.forward_from or msg.forward_from.username != "Slugterraa_bot":
+        await msg.reply_text("❌ Message not forwarded from @Slugterraa_bot.")
         return
 
-    if not message.forward_from or message.forward_from.username != "Slugterraa_bot":
+    if not msg.text:
+        await msg.reply_text("❌ Forwarded message has no text.")
         return
 
-    date_today = datetime.now(timezone.utc).date()
-    if message.date.date() != date_today:
+    if not msg.forward_date:
+        await msg.reply_text("❌ Message has no forward_date.")
         return
 
-    text = message.text or message.caption or ""
+    today_utc = datetime.now(timezone.utc).date()
+    msg_date_utc = msg.forward_date.date()
+
+    if msg_date_utc != today_utc:
+        await msg.reply_text("❌ Message is not from today.")
+        return
+
+    message_hash = hashlib.md5((msg.text + str(msg.forward_date.date())).encode()).hexdigest()
     progress_table = DB.table("progress")
-    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id, "slugs": {}, "message_ids": []}
-    msg_ids = user_data.get("message_ids", [])
-    if message.message_id in msg_ids:
-        return
+    user_data = progress_table.get(UserQ.id == user_id)
 
-    msg_ids.append(message.message_id)
-    user_data["message_ids"] = msg_ids
+    if user_data:
+        seen_hashes = user_data.get("message_hashes", [])
+        if message_hash in seen_hashes:
+            await msg.reply_text("❌ Duplicate message. Already counted.")
+            return
+        seen_hashes.append(message_hash)
+        current_count = user_data.get("keys", 0)
+    else:
+        seen_hashes = [message_hash]
+        current_count = 0
+        user_data = {"id": user_id, "slugs": {}, "message_hashes": seen_hashes}
 
     updated = False
-    text_lower = text.lower()
+    text_lower = msg.text.lower()
+
     if "you found a key" in text_lower:
-        user_data["keys"] = user_data.get("keys", 0) + 1
+        current_count += 1
+        user_data["keys"] = current_count
         updated = True
+        await msg.reply_text(f"✅ {current_count} keys collected so far.")
+
     elif "your luck is good you got" in text_lower:
         try:
-            slug_name = text.split("got", 1)[1].strip().split()[0].strip(".!")
+            slug_name = msg.text.split("got", 1)[1].strip().split()[0].strip(".!")
             slugs = user_data.get("slugs", {})
             slugs[slug_name.lower()] = slugs.get(slug_name.lower(), 0) + 1
             user_data["slugs"] = slugs
             updated = True
+            await msg.reply_text(f"✅ Slug collected: {slug_name.capitalize()}")
         except Exception:
-            pass
+            await msg.reply_text("❌ Failed to parse slug name.")
+
     elif "daily limit reached" in text_lower:
         user_data["limit_done"] = True
         updated = True
+        await msg.reply_text("✅ Daily limit marked as completed.")
+
+    user_data["message_hashes"] = seen_hashes
 
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
         await log_task_completion(context, user_id)
 
-# === Attach handler to app ===
+# === Attach handler ===
 app = ApplicationBuilder().token(BOT_TOKEN).build()
-
-app.add_handler(MessageHandler(filters.FORWARDED & filters.TEXT & (~filters.COMMAND), forwarded_handler))
-
-print("🔁 Forwarded message handler added.")
+app.add_handler(MessageHandler(filters.FORWARDED & filters.TEXT & (~filters.COMMAND), handle_forward))
+print("🔁 Forwarded message handler with hash check added.")
 
 # === /settask1 (key task) ===
 async def settask1(update: Update, context: ContextTypes.DEFAULT_TYPE):
