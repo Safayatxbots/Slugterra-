@@ -11,6 +11,33 @@ OWNER_ID = 6279412066
 DB = TinyDB("datta.json")
 UserQ = Query()
 
+import os
+import json
+from tinydb import TinyDB, Query
+from datetime import datetime, timezone
+
+DB_PATH = "bot_data.json"
+
+# 🛡️ Check and fix empty DB file
+if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) == 0:
+    with open(DB_PATH, 'w') as f:
+        json.dump({}, f)  # write an empty dict to make it valid JSON
+
+DB = TinyDB(DB_PATH)
+UserQ = Query()
+
+today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+task_table = DB.table("tasks")
+
+try:
+    today_task = task_table.get(UserQ.date == today)
+    if not isinstance(today_task, dict):
+        raise TypeError("Corrupted data structure")
+except Exception as e:
+    print("💥 Error reading task table:", e)
+    task_table.truncate()
+    today_task = {"date": today, "tasks": []}
+
 from tinydb import where
 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 task_table = DB.table("tasks")  # ✅ define it first
