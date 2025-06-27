@@ -51,6 +51,30 @@ except Exception as e:
     task_table.truncate()
     today_task = {"date": today, "tasks": []}
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+# Add at the top of your script (after DB setup)
+scheduler = AsyncIOScheduler()
+
+# Daily profile reset task
+def reset_profiles():
+    progress_table = DB.table("progress")
+    for user in progress_table.all():
+        user_id = user["id"]
+        progress_table.update({
+            "count": 0,
+            "keys": 0,
+            "slugs": {},
+            "limit_done": False,
+            "message_ids": []
+        }, UserQ.id == user_id)
+    print("✅ All user profiles reset for new day.")
+
+# Start the scheduler
+scheduler.add_job(reset_profiles, "cron", hour=0, minute=0)  # Adjust time if needed
+scheduler.start()
+
+
 
 
 # === /approve ===
