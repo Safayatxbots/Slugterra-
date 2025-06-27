@@ -451,7 +451,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-
 # === Setup Bot ===
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
@@ -467,6 +466,8 @@ app.add_handler(CommandHandler("addkey", addkey))
 app.add_handler(CommandHandler("addslug", addslug))
 app.add_handler(CommandHandler("limitdone", limitdone))
 
+# ✅ Fix: Add this line again here
+app.add_handler(MessageHandler(filters.FORWARDED & filters.TEXT & (~filters.COMMAND), handle_forward))
 
 print("🤖 Bot is running...")
 app.run_polling()
