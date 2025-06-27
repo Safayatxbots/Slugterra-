@@ -199,11 +199,28 @@ async def get(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 # === /start ===
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not DB.table("approved").contains(UserQ.id == user_id):
         return await update.message.reply_text("❌ You are not approved.")
-    await update.message.reply_text("👋 Welcome! Use /task to view your task.")
+
+    keyboard = [
+        [InlineKeyboardButton("⚡ Support", url="https://t.me/YourBotUsername?start=task")],
+        [InlineKeyboardButton("🔥 Updates", url="https://t.me/Ashxbots")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    caption = "👋 Welcome to the **Rewards bot of Shane**\n\nI gives daily task 🗒️. Complete and get Rewards 💎 from Gang Admins"
+
+    await context.bot.send_photo(
+        chat_id=update.effective_chat.id,
+        photo="https://envs.sh/2P5.jpg",  # Replace with your image URL
+        caption=caption,
+        reply_markup=reply_markup
+    )
+
 
 # === Setup Bot ===
 app = ApplicationBuilder().token(BOT_TOKEN).build()
