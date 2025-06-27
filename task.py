@@ -1,80 +1,56 @@
-
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 from tinydb import TinyDB, Query
 from datetime import datetime, timezone
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import hashlib
+import os
+import json
 
 # === CONFIG ===
 BOT_TOKEN = "7803226404:AAGx-YvdgquS9qU3rzULa09zQBsoYgYUcjY"
 OWNER_ID = 6279412066
-DB = TinyDB("datta.json")
-UserQ = Query()
-
-
-
-import os
-import json
-from tinydb import TinyDB, Query
-from datetime import datetime, timezone
-
+ADMINS = [6279412066, 1234567890]  # Add other admin IDs here
 DB_PATH = "bot_data.json"
 
-# 🛡️ Check and fix empty DB file
 if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) == 0:
     with open(DB_PATH, 'w') as f:
-        json.dump({}, f)  # write an empty dict to make it valid JSON
+        json.dump({}, f)
 
 DB = TinyDB(DB_PATH)
 UserQ = Query()
-
-today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 task_table = DB.table("tasks")
 LOG_GROUP_ID = -1002893931329
-
 REWARD_VALUES = {
-    "key": {"gems": 450, "coins": 10000},
-    "slug": {"gems": 1100, "coins": 80000},
-    "daily_limit": {"gems": 700, "coins": 30000},
+    "key": {"gems": 450, "coins": 10000},
+    "slug": {"gems": 1100, "coins": 80000},
+    "daily_limit": {"gems": 700, "coins": 30000},
 }
 
-try:
-    today_task = task_table.get(UserQ.date == today)
-    if not isinstance(today_task, dict):
-        raise TypeError("Corrupted data structure")
-except Exception as e:
-    print("💥 Error reading task table:", e)
-    task_table.truncate()
-    today_task = {"date": today, "tasks": []}
+# === Helpers ===
+def is_owner(user_id):
+    return user_id == OWNER_ID
 
-from tinydb import where
-today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-task_table = DB.table("tasks")  # ✅ define it first
+def is_admin(user_id):
+    return user_id in ADMINS
 
-try:
-    today_task = task_table.get(UserQ.date == today)
-    if not isinstance(today_task, dict):
-        raise TypeError("Corrupted data structure")
-except Exception as e:
-    print("💥 Error reading task table:", e)
-    task_table.truncate()
-    today_task = {"date": today, "tasks": []}
+def is_approved(user_id):
+    return DB.table("approved").contains(UserQ.id == user_id)
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
+# === Scheduler ===
 scheduler = AsyncIOScheduler()
 
 def reset_profiles():
     progress_table = DB.table("progress")
     for user in progress_table.all():
-        user_id = user["id"]
         progress_table.update({
             "count": 0,
             "keys": 0,
             "slugs": {},
             "limit_done": False,
-            "message_ids": []
-        }, UserQ.id == user_id)
+            "message_ids": [],
+            "completed_tasks": []
+        }, UserQ.id == user["id"])
     print("✅ All user profiles reset for new day.")
 
 async def on_startup(app):
@@ -82,63 +58,57 @@ async def on_startup(app):
     scheduler.start()
     print("🕛 Scheduler started.")
 
-
-
+# === Reward Logger ===
 async def log_task_completion(context: ContextTypes.DEFAULT_TYPE, user_id: int):
-    user = await context.bot.get_chat(user_id)
-    progress_table = DB.table("progress")
-    task_data = DB.table("tasks").get(UserQ.date == datetime.now(timezone.utc).strftime("%Y-%m-%d")) or {"tasks": []}
-    user_data = progress_table.get(UserQ.id == user_id) or {}
-    completed_before = user_data.get("completed_tasks", [])
+    user = await context.bot.get_chat(user_id)
+    progress_table = DB.table("progress")
+    task_data = task_table.get(UserQ.date == datetime.now(timezone.utc).strftime("%Y-%m-%d")) or {"tasks": []}
+    user_data = progress_table.get(UserQ.id == user_id) or {}
+    completed_before = user_data.get("completed_tasks", [])
 
-    new_completed = []
-    total_gems = 0
-    total_coins = 0
+    new_completed = []
+    total_gems = 0
+    total_coins = 0
 
-    for idx, task in enumerate(task_data["tasks"], 1):
-        if str(idx) in completed_before:
-            continue  # already logged
+    for idx, task in enumerate(task_data["tasks"], 1):
+        if str(idx) in completed_before:
+            continue
 
-        if task["type"] == "key":
-            if user_data.get("keys", 0) >= task["min"]:
-                new_completed.append(str(idx))
-                total_gems += REWARD_VALUES["key"]["gems"]
-                total_coins += REWARD_VALUES["key"]["coins"]
-        elif task["type"] == "slug":
-            slug_count = user_data.get("slugs", {}).get(task["name"].lower(), 0)
-            if slug_count >= task["count"]:
-                new_completed.append(str(idx))
-                total_gems += REWARD_VALUES["slug"]["gems"]
-                total_coins += REWARD_VALUES["slug"]["coins"]
-        elif task["type"] == "daily_limit":
-            if user_data.get("limit_done", False):
-                new_completed.append(str(idx))
-                total_gems += REWARD_VALUES["daily_limit"]["gems"]
-                total_coins += REWARD_VALUES["daily_limit"]["coins"]
+        if task["type"] == "key":
+            if user_data.get("keys", 0) >= task["min"]:
+                new_completed.append(str(idx))
+                total_gems += REWARD_VALUES["key"]["gems"]
+                total_coins += REWARD_VALUES["key"]["coins"]
+        elif task["type"] == "slug":
+            slug_count = user_data.get("slugs", {}).get(task["name"].lower(), 0)
+            if slug_count >= task["count"]:
+                new_completed.append(str(idx))
+                total_gems += REWARD_VALUES["slug"]["gems"]
+                total_coins += REWARD_VALUES["slug"]["coins"]
+        elif task["type"] == "daily_limit":
+            if user_data.get("limit_done", False):
+                new_completed.append(str(idx))
+                total_gems += REWARD_VALUES["daily_limit"]["gems"]
+                total_coins += REWARD_VALUES["daily_limit"]["coins"]
 
-    if not new_completed:
-        return  # Nothing new completed
+    if not new_completed:
+        return
 
-    message = (
-        f"👤 Name: {user.first_name}\n"
-        f"🆔 ID: `{user.id}`\n"
-        f"🔗 Username: @{user.username or 'N/A'}\n"
-        f"✅ Completed Tasks: {', '.join(new_completed)}\n"
-        f"💎 Gems to Send: {total_gems}\n"
-        f"🪙 Coins to Send: {total_coins}"
-    )
+    message = (
+        f"👤 Name: {user.first_name}\n"
+        f"🆔 ID: `{user.id}`\n"
+        f"🔗 Username: @{user.username or 'N/A'}\n"
+        f"✅ Completed Tasks: {', '.join(new_completed)}\n"
+        f"💎 Gems to Send: {total_gems}\n"
+        f"🪙 Coins to Send: {total_coins}"
+    )
 
-    # Send logs
-    await context.bot.send_message(chat_id=OWNER_ID, text=message, parse_mode="Markdown")
-    await context.bot.send_message(chat_id=LOG_GROUP_ID, text=message, parse_mode="Markdown")
+    await context.bot.send_message(chat_id=OWNER_ID, text=message, parse_mode="Markdown")
+    await context.bot.send_message(chat_id=LOG_GROUP_ID, text=message, parse_mode="Markdown")
+    updated = list(set(completed_before + new_completed))
+    progress_table.update({"completed_tasks": updated}, UserQ.id == user_id)
 
-    # Mark as completed
-    updated = list(set(completed_before + new_completed))
-    progress_table.update({"completed_tasks": updated}, UserQ.id == user_id)
-
-
-
-
+# === (continued below with rest of 424+ lines code...)
 # === /approve ===
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
@@ -210,7 +180,7 @@ async def settask2(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     task_table = DB.table("tasks")
-    
+
     today_task = task_table.get(UserQ.date == today)
     if not isinstance(today_task, dict):
         today_task = {"date": today, "tasks": []}
@@ -259,27 +229,27 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
     if not DB.table("approved").contains(UserQ.id == user_id):
         return await update.message.reply_text("❌ You are not approved.")
-    
+
     progress = DB.table("progress").get(UserQ.id == user_id) or {}
     keys = progress.get("keys", 0)
     slugs = progress.get("slugs", {})
     limit_done = progress.get("limit_done", False)
-    
+
     lines = [
         f"✵ Name : {user_name}",
         f"► ID : `{user_id}`",
         f"► Keys : {keys}",
         f"► Slugs :"
     ]
-    
+
     if slugs:
         for name, count in slugs.items():
             lines.append(f"{name.capitalize()} : {count}")
     else:
         lines.append("   ┗ None")
-    
+
     lines.append(f"► Daily limit : {'✅' if limit_done else '❌'}")
-    
+
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 # === /get (admin check user profile) ===
@@ -287,95 +257,95 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return await update.message.reply_text("Unauthorized.")
-    
+
     if not update.message.reply_to_message:
         return await update.message.reply_text("❌ Reply to a user to get their profile.")
-    
+
     user = update.message.reply_to_message.from_user
     user_id = user.id
     user_name = user.first_name
-    
+
     progress = DB.table("progress").get(UserQ.id == user_id) or {}
     keys = progress.get("keys", 0)
     slugs = progress.get("slugs", {})
     limit_done = progress.get("limit_done", False)
-    
+
     lines = [
         f"✵ Name : {user_name}",
         f"► ID : `{user_id}`",
         f"► Keys : {keys}",
         f"► Slugs :"
     ]
-    
+
     if slugs:
         for name, count in slugs.items():
             lines.append(f"{name.capitalize()} : {count}")
     else:
         lines.append("   ┗ None")
-    
+
     lines.append(f"► Daily limit : {'✅' if limit_done else '❌'}")
-    
+
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 # === /start ===
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 def reset_profiles():
-    progress_table = DB.table("progress")
-    for user in progress_table.all():
-        user_id = user["id"]
-        progress_table.update({
-            "count": 0,
-            "keys": 0,
-            "slugs": {},
-            "limit_done": False,
-            "message_ids": [],
-            "completed_tasks": []  # ← add this
-        }, UserQ.id == user_id)
-    print("✅ All user profiles reset for new day.")
+    progress_table = DB.table("progress")
+    for user in progress_table.all():
+        user_id = user["id"]
+        progress_table.update({
+            "count": 0,
+            "keys": 0,
+            "slugs": {},
+            "limit_done": False,
+            "message_ids": [],
+            "completed_tasks": []  # ← add this
+        }, UserQ.id == user_id)
+    print("✅ All user profiles reset for new day.")
 
 async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not DB.table("approved").contains(UserQ.id == user_id):
-        return await update.message.reply_text("❌ You are not approved.")
-    progress_table = DB.table("progress")
-    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id}
-    user_data["keys"] = user_data.get("keys", 0) + 1
-    progress_table.upsert(user_data, UserQ.id == user_id)
+    user_id = update.effective_user.id
+    if not DB.table("approved").contains(UserQ.id == user_id):
+        return await update.message.reply_text("❌ You are not approved.")
+    progress_table = DB.table("progress")
+    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id}
+    user_data["keys"] = user_data.get("keys", 0) + 1
+    progress_table.upsert(user_data, UserQ.id == user_id)
 
-    await update.message.reply_text("🔑 Key added.")
-    await log_task_completion(context, user_id)  # 👈 log check
+    await update.message.reply_text("🔑 Key added.")
+    await log_task_completion(context, user_id)  # 👈 log check
 
 async def limitdone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not DB.table("approved").contains(UserQ.id == user_id):
-        return await update.message.reply_text("❌ You are not approved.")
-    progress_table = DB.table("progress")
-    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id}
-    user_data["limit_done"] = True
-    progress_table.upsert(user_data, UserQ.id == user_id)
+    user_id = update.effective_user.id
+    if not DB.table("approved").contains(UserQ.id == user_id):
+        return await update.message.reply_text("❌ You are not approved.")
+    progress_table = DB.table("progress")
+    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id}
+    user_data["limit_done"] = True
+    progress_table.upsert(user_data, UserQ.id == user_id)
 
-    await update.message.reply_text("⚡ Daily limit marked as completed.")
-    await log_task_completion(context, user_id)
+    await update.message.reply_text("⚡ Daily limit marked as completed.")
+    await log_task_completion(context, user_id)
 
 async def addslug(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not DB.table("approved").contains(UserQ.id == user_id):
-        return await update.message.reply_text("❌ You are not approved.")
-    if not context.args:
-        return await update.message.reply_text("Usage: /addslug <slug_name>")
+    user_id = update.effective_user.id
+    if not DB.table("approved").contains(UserQ.id == user_id):
+        return await update.message.reply_text("❌ You are not approved.")
+    if not context.args:
+        return await update.message.reply_text("Usage: /addslug <slug_name>")
 
-    slug_name = context.args[0].lower()
-    progress_table = DB.table("progress")
-    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id, "slugs": {}}
+    slug_name = context.args[0].lower()
+    progress_table = DB.table("progress")
+    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id, "slugs": {}}
 
-    slugs = user_data.get("slugs", {})
-    slugs[slug_name] = slugs.get(slug_name, 0) + 1
-    user_data["slugs"] = slugs
-    progress_table.upsert(user_data, UserQ.id == user_id)
+    slugs = user_data.get("slugs", {})
+    slugs[slug_name] = slugs.get(slug_name, 0) + 1
+    user_data["slugs"] = slugs
+    progress_table.upsert(user_data, UserQ.id == user_id)
 
-    await update.message.reply_text(f"🐌 Slug added: {slug_name.capitalize()}")
-    await log_task_completion(context, user_id)
+    await update.message.reply_text(f"🐌 Slug added: {slug_name.capitalize()}")
+    await log_task_completion(context, user_id)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
