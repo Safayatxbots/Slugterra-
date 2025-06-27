@@ -346,6 +346,38 @@ async def addkey(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🔑 Key added.")
     await log_task_completion(context, user_id)  # 👈 log check
 
+async def limitdone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not DB.table("approved").contains(UserQ.id == user_id):
+        return await update.message.reply_text("❌ You are not approved.")
+    progress_table = DB.table("progress")
+    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id}
+    user_data["limit_done"] = True
+    progress_table.upsert(user_data, UserQ.id == user_id)
+
+    await update.message.reply_text("⚡ Daily limit marked as completed.")
+    await log_task_completion(context, user_id)
+
+async def addslug(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not DB.table("approved").contains(UserQ.id == user_id):
+        return await update.message.reply_text("❌ You are not approved.")
+    if not context.args:
+        return await update.message.reply_text("Usage: /addslug <slug_name>")
+
+    slug_name = context.args[0].lower()
+    progress_table = DB.table("progress")
+    user_data = progress_table.get(UserQ.id == user_id) or {"id": user_id, "slugs": {}}
+
+    slugs = user_data.get("slugs", {})
+    slugs[slug_name] = slugs.get(slug_name, 0) + 1
+    user_data["slugs"] = slugs
+    progress_table.upsert(user_data, UserQ.id == user_id)
+
+    await update.message.reply_text(f"🐌 Slug added: {slug_name.capitalize()}")
+    await log_task_completion(context, user_id)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not DB.table("approved").contains(UserQ.id == user_id):
@@ -383,6 +415,10 @@ app.add_handler(CommandHandler("settask3", settask3))
 app.add_handler(CommandHandler("task", task))
 app.add_handler(CommandHandler("myprofile", profile))
 app.add_handler(CommandHandler("get", get))
+app.add_handler(CommandHandler("addkey", addkey))
+app.add_handler(CommandHandler("addslug", addslug))
+app.add_handler(CommandHandler("limitdone", limitdone))
+
 
 print("🤖 Bot is running...")
 app.run_polling()
