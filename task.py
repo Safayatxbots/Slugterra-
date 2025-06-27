@@ -57,27 +57,37 @@ except Exception as e:
 async def approve(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return await update.message.reply_text("Unauthorized.")
-    if not context.args:
-        return await update.message.reply_text("Usage: /approve <user_id>")
-    try:
-        user_id = int(context.args[0])
-        DB.table("approved").upsert({"id": user_id}, UserQ.id == user_id)
-        await update.message.reply_text(f"✅ Approved user {user_id}")
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID")
+
+    if update.message.reply_to_message:
+        user_id = update.message.reply_to_message.from_user.id
+    elif context.args:
+        try:
+            user_id = int(context.args[0])
+        except ValueError:
+            return await update.message.reply_text("❌ Invalid user ID.")
+    else:
+        return await update.message.reply_text("Usage: Reply to a user or /approve <user_id>")
+
+    DB.table("approved").upsert({"id": user_id}, UserQ.id == user_id)
+    await update.message.reply_text(f"✅ Approved user `{user_id}`", parse_mode="Markdown")
 
 # === /unapprove ===
 async def unapprove(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != OWNER_ID:
         return await update.message.reply_text("Unauthorized.")
-    if not context.args:
-        return await update.message.reply_text("Usage: /unapprove <user_id>")
-    try:
-        user_id = int(context.args[0])
-        DB.table("approved").remove(UserQ.id == user_id)
-        await update.message.reply_text(f"🚫 Unapproved user {user_id}")
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID")
+
+    if update.message.reply_to_message:
+        user_id = update.message.reply_to_message.from_user.id
+    elif context.args:
+        try:
+            user_id = int(context.args[0])
+        except ValueError:
+            return await update.message.reply_text("❌ Invalid user ID.")
+    else:
+        return await update.message.reply_text("Usage: Reply to a user or /unapprove <user_id>")
+
+    DB.table("approved").remove(UserQ.id == user_id)
+    await update.message.reply_text(f"🚫 Unapproved user `{user_id}`", parse_mode="Markdown")
 
 # === /settask1 (key task) ===
 async def settask1(update: Update, context: ContextTypes.DEFAULT_TYPE):
