@@ -211,26 +211,26 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = update.effective_user.id
 
-    # ✅ Must be a forwarded message with a timestamp
+    # ✅ Check: must be a forwarded message with timestamp
     if not getattr(msg, "forward_date", None):
-        return await msg.reply_text("❌ Please forward a valid message from @Slugterraa_bot. It must show a timestamp.")
+        return await msg.reply_text("❌ Please forward a valid message showing a timestamp.")
 
-    # ✅ Must be a text message
+    # ✅ Check: must be text
     if not msg.text:
         return await msg.reply_text("❌ Forwarded message has no text.")
 
-    # ✅ Ensure message is from today
+    # ✅ Check: message must be from today
     today = datetime.now(timezone.utc).date()
     if msg.forward_date.date() != today:
         return await msg.reply_text("❌ Message is not from today.")
 
-    # ✅ Generate a unique hash using message + timestamp
+    # ✅ Generate unique message hash
     message_hash = hashlib.md5((msg.text + str(msg.forward_date)).encode()).hexdigest()
 
     progress_table = DB.table("progress")
     global_table = DB.table("global_seen")
 
-    # ✅ Global hash check (used by others)
+    # ✅ Global duplicate check
     if global_table.contains(UserQ.hash == message_hash):
         return await msg.reply_text("❌ This message has already been used by another user.")
 
@@ -246,20 +246,20 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "completed_tasks": []
         }
 
-    # ✅ Local user duplicate check
-    if message_hash in user_data.get("message_hashes", []):
+    # ✅ User’s own duplicate check
+    if message_hash in user_data["message_hashes"]:
         return await msg.reply_text("⚠️ You've already used this message.")
 
     updated = False
     text_lower = msg.text.lower()
 
-    # ✅ Handle key detection
+    # ✅ Check for key message
     if any(kw in text_lower for kw in ["you found a key", "🔑 while exploring", "obtained a key"]):
         user_data["keys"] += 1
         await msg.reply_text(f"✅ Key collected! Total: {user_data['keys']}")
         updated = True
 
-    # ✅ Handle slug detection
+    # ✅ Check for slug message
     elif any(kw in text_lower for kw in ["your luck is good", "you got", "you found a slug"]):
         try:
             slug_match = re.search(r'got\s+([A-Za-z0-9_-]+)', msg.text, re.IGNORECASE)
@@ -276,13 +276,13 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             await msg.reply_text("❌ Couldn't parse slug name.")
 
-    # ✅ Handle daily limit detection
+    # ✅ Check for daily limit message
     elif "daily limit reached" in text_lower or "you can't explore more today" in text_lower:
         user_data["limit_done"] = True
         await msg.reply_text("✅ Daily limit marked as completed.")
         updated = True
 
-    # ✅ Add used message hash
+    # ✅ Store message hash
     user_data["message_hashes"].append(message_hash)
 
     if updated:
