@@ -69,6 +69,7 @@ REWARD_VALUES = {
     "slug": {"gems": 700, "coins": 30000},
     "daily_limit": {"gems": 1100, "coins": 80000}
 }
+progress_table = DB.table("progress")
 user_data = progress_table.get(UserQ.id == user_id)
 if not user_data:
     user_data = {
