@@ -272,6 +272,52 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         global_table.insert({"hash": message_hash})
         await log_task_completion(context, user_id)
 
+# === /settask1 (key task) ===
+async def settask1(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        return await update.message.reply_text("Unauthorized.")
+    if len(context.args) < 2:
+        return await update.message.reply_text("Usage: /settask1 <min> <max>")
+    try:
+        min_keys = int(context.args[0])
+        max_keys = int(context.args[1])
+        if min_keys > max_keys:
+            return await update.message.reply_text("❌ Min cannot be greater than max.")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        task_table = DB.table("tasks")
+        today_task = task_table.get(UserQ.date == today) or {"date": today, "tasks": []}
+        today_task["tasks"].append({"type": "key", "min": min_keys, "max": max_keys})
+        task_table.upsert(today_task, UserQ.date == today)
+        await update.message.reply_text("✅ Key task added.")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid input.")
+
+# === /settask2 (slug task) ===
+async def settask2(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id != OWNER_ID:
+        return await update.message.reply_text("Unauthorized.")
+    if len(context.args) < 2:
+        return await update.message.reply_text("Usage: /settask2 <slugname> <count>")
+
+    try:
+        slug_name = context.args[0].lower()
+        count = int(context.args[1])
+    except ValueError:
+        return await update.message.reply_text("❌ Count must be a number.")
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    task_table = DB.table("tasks")
+    today_task = task_table.get(UserQ.date == today) or {"date": today, "tasks": []}
+
+    today_task["tasks"].append({
+        "type": "slug",
+        "name": slug_name,
+        "count": count
+    })
+
+    task_table.upsert(today_task, UserQ.date == today)
+    await update.message.reply_text(f"✅ Slug task set: Collect {count} × {slug_name.capitalize()}")
+
 
 # === /settask3 (daily limit task) ===
 async def settask3(update: Update, context: ContextTypes.DEFAULT_TYPE):
