@@ -198,42 +198,42 @@ from telegram.ext import ContextTypes
 from datetime import datetime, timezone
 import hashlib
 
+import re
+import hashlib
+from datetime import datetime, timezone
 from telegram import Update
 from telegram.ext import ContextTypes
-from datetime import datetime, timezone
-import hashlib
-
-import re
 
 async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if not msg:
-        return  # Not a message (e.g., edited or callback)
+        return  # Ignore non-message updates
 
     user_id = update.effective_user.id
 
-    # ✅ Must be a forwarded message with date
+    # ✅ Must be a forwarded message
     if not getattr(msg, "forward_date", None):
-        return await msg.reply_text("❌ Please forward a message from @Slugterraa_bot.")
+        return await msg.reply_text("❌ Please forward a valid message from @Slugterraa_bot. It must show a timestamp.")
+    
     if not msg.text:
         return await msg.reply_text("❌ Forwarded message has no text.")
 
-    # ✅ Message must be from today
+    # ✅ Ensure message is from today
     today = datetime.now(timezone.utc).date()
     if msg.forward_date.date() != today:
-        return await msg.reply_text("❌ Message is not from today.")
+        return await msg.reply_text("❌ Message is not from today. Send a fresh one from @Slugterraa_bot.")
 
-    # ✅ Create a unique hash to prevent duplicates
+    # ✅ Create unique hash
     message_hash = hashlib.md5((msg.text + str(msg.forward_date)).encode()).hexdigest()
 
     progress_table = DB.table("progress")
     global_table = DB.table("global_seen")
 
-    # ✅ Global reuse check
+    # ✅ Global hash check
     if global_table.contains(UserQ.hash == message_hash):
-        return await msg.reply_text("❌ This message has already been used by another user.")
+        return await msg.reply_text("❌ This message was already used by another user.")
 
-    # ✅ Get or create user data
+    # ✅ Load or create user data
     user_data = progress_table.get(UserQ.id == user_id)
     if not user_data:
         user_data = {
@@ -245,27 +245,26 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "completed_tasks": []
         }
 
-    # ✅ Local duplicate check
+    # ✅ User's own duplicate check
     if message_hash in user_data.get("message_hashes", []):
         return await msg.reply_text("⚠️ You've already used this message.")
 
     updated = False
     text_lower = msg.text.lower()
 
-    # ✅ Detect key messages
+    # ✅ Key message detection
     if any(kw in text_lower for kw in ["you found a key", "🔑 while exploring", "obtained a key"]):
         user_data["keys"] += 1
         await msg.reply_text(f"✅ Key collected! Total: {user_data['keys']}")
         updated = True
 
-    # ✅ Detect slug messages
+    # ✅ Slug detection
     elif any(kw in text_lower for kw in ["your luck is good", "you got", "you found a slug"]):
         try:
             slug_match = re.search(r'got\s+([A-Za-z0-9_-]+)', msg.text, re.IGNORECASE)
             if slug_match:
                 slug_name = slug_match.group(1).lower().strip(".!,")
             else:
-                # fallback: take second word if "got" not found
                 slug_name = msg.text.strip().split()[2].lower()
 
             slugs = user_data.get("slugs", {})
@@ -276,15 +275,16 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             await msg.reply_text("❌ Couldn't parse slug name.")
 
-    # ✅ Detect daily limit reached messages
+    # ✅ Daily limit message detection
     elif "daily limit reached" in text_lower or "you can't explore more today" in text_lower:
         user_data["limit_done"] = True
         await msg.reply_text("✅ Daily limit marked as completed.")
         updated = True
 
-    # ✅ Store used hash
+    # ✅ Add message hash to prevent reuse
     user_data["message_hashes"].append(message_hash)
 
+    # ✅ Save progress if updated
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
         global_table.insert({"hash": message_hash})
