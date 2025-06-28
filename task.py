@@ -193,37 +193,42 @@ async def unapprove(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 
-# === Handle Forwarded Slugterraa Messages with Hash Check ===
+from telegram import Update
+from telegram.ext import ContextTypes
+from datetime import datetime, timezone
+import hashlib
+
 async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg = update.message
 
-    # ✅ Validate sender
+    # 1. Ensure it's a forwarded message from @Slugterraa_bot
     sender_username = (
         msg.forward_from.username if msg.forward_from else
         msg.forward_from_chat.username if msg.forward_from_chat else None
     )
+
     if sender_username is None or sender_username.lower() != "slugterraa_bot":
         return await msg.reply_text("❌ Message not from @Slugterraa_bot.")
-    
     if not msg.text or not msg.forward_date:
         return await msg.reply_text("❌ Invalid forwarded message.")
 
-    # ✅ Check date
+    # 2. Check if it's forwarded today
     today_utc = datetime.now(timezone.utc).date()
     if msg.forward_date.date() != today_utc:
-        return await msg.reply_text("❌ Message not from today.")
+        return await msg.reply_text("❌ Message is not from today.")
 
-    # ✅ Hash the message
+    # 3. Generate unique message hash
     message_hash = hashlib.md5((msg.text + str(msg.forward_date)).encode()).hexdigest()
-    global_table = DB.table("global_seen")
+
     progress_table = DB.table("progress")
+    global_table = DB.table("global_seen")
 
-    # ✅ Check global usage
+    # 4. Check if message already seen globally
     if global_table.contains(UserQ.hash == message_hash):
-        return await msg.reply_text("❌ This message has already been used by another user.")
+        return await msg.reply_text("❌ Message already used by another user.")
 
-    # ✅ Get or create user data
+    # 5. Get or initialize user profile
     user_data = progress_table.get(UserQ.id == user_id)
     if not user_data:
         user_data = {
@@ -235,13 +240,12 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "completed_tasks": []
         }
 
-    # ✅ Check per-user duplicate
     if message_hash in user_data.get("message_hashes", []):
         return await msg.reply_text("⚠️ You've already used this message.")
 
-    # ✅ Detect and process
-    updated = False
+    # 6. Detect and handle type of message
     text_lower = msg.text.lower()
+    updated = False
 
     if "you found a key" in text_lower:
         user_data["keys"] += 1
@@ -264,7 +268,7 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("✅ Daily limit marked as complete.")
         updated = True
 
-    # ✅ Save hash to prevent reprocessing
+    # 7. Add hash to user and global seen list
     user_data["message_hashes"] = user_data.get("message_hashes", []) + [message_hash]
 
     if updated:
