@@ -11,7 +11,7 @@ import json
 BOT_TOKEN = "7803226404:AAGx-YvdgquS9qU3rzULa09zQBsoYgYUcjY"
 OWNER_ID = 6279412066
 ADMINS = [6279412066, 5903871499]  # Add other admin IDs here
-DB_PATH = "bot_data.json"
+DB_PATH = "datta.json"
 
 if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) == 0:
     with open(DB_PATH, 'w') as f:
