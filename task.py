@@ -148,29 +148,48 @@ async def unapprove(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # === Handle Forwarded Slugterraa Messages with Hash Check ===
+import logging
+from telegram import Update
+from telegram.ext import ContextTypes
+from datetime import datetime, timezone
+import hashlib
+
+logging.basicConfig(level=logging.INFO)
+
 async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg = update.message
 
-    if not msg.forward_from or msg.forward_from.username != "Slugterraa_bot":
-        await msg.reply_text("❌ Message not forwarded from @Slugterraa_bot.")
-        return
+    # ✅ Log that a forwarded message was received
+    logging.info(f"Forwarded message from {user_id}: {msg.text}")
+
+    # ✅ Check if forwarded message is from bot or channel
+    sender_username = None
+
+    if msg.forward_from:
+        sender_username = msg.forward_from.username
+    elif msg.forward_from_chat:
+        sender_username = msg.forward_from_chat.username
+
+    if not sender_username:
+        return await msg.reply_text("❌ Not a valid forwarded message.")
+
+    if sender_username.lower() != "slugterraa_bot":
+        return await msg.reply_text("❌ Message not from @Slugterraa_bot.")
 
     if not msg.text:
-        await msg.reply_text("❌ Forwarded message has no text.")
-        return
+        return await msg.reply_text("❌ Forwarded message has no text.")
 
     if not msg.forward_date:
-        await msg.reply_text("❌ Message has no forward_date.")
-        return
+        return await msg.reply_text("❌ Message has no forward_date.")
 
     today_utc = datetime.now(timezone.utc).date()
     msg_date_utc = msg.forward_date.date()
 
     if msg_date_utc != today_utc:
-        await msg.reply_text("❌ Message is not from today.")
-        return
+        return await msg.reply_text("❌ Message is not from today.")
 
+    # ✅ Generate hash for de-duplication
     message_hash = hashlib.md5((msg.text + str(msg.forward_date.date())).encode()).hexdigest()
     progress_table = DB.table("progress")
     user_data = progress_table.get(UserQ.id == user_id)
@@ -178,8 +197,7 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_data:
         seen_hashes = user_data.get("message_hashes", [])
         if message_hash in seen_hashes:
-            await msg.reply_text("❌ Duplicate message. Already counted.")
-            return
+            return await msg.reply_text("❌ Duplicate message. Already counted.")
         seen_hashes.append(message_hash)
         current_count = user_data.get("keys", 0)
     else:
@@ -217,11 +235,6 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
         await log_task_completion(context, user_id)
-
-# === Attach handler ===
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(MessageHandler(filters.FORWARDED & filters.TEXT & (~filters.COMMAND), handle_forward))
-print("🔁 Forwarded message handler with hash check added.")
 
 # === /settask1 (key task) ===
 async def settask1(update: Update, context: ContextTypes.DEFAULT_TYPE):
