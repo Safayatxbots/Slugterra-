@@ -203,12 +203,17 @@ from telegram.ext import ContextTypes
 from datetime import datetime, timezone
 import hashlib
 
-async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    msg = update.message
+import re
 
-    # ✅ Must be a forwarded message
-    if not msg.forward_date:
+async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = update.message
+    if not msg:
+        return  # Not a message (e.g., edited or callback)
+
+    user_id = update.effective_user.id
+
+    # ✅ Must be a forwarded message with date
+    if not getattr(msg, "forward_date", None):
         return await msg.reply_text("❌ Please forward a message from @Slugterraa_bot.")
     if not msg.text:
         return await msg.reply_text("❌ Forwarded message has no text.")
@@ -256,7 +261,13 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ✅ Detect slug messages
     elif any(kw in text_lower for kw in ["your luck is good", "you got", "you found a slug"]):
         try:
-            slug_name = msg.text.split("got", 1)[1].strip().split()[0].strip(".!").lower()
+            slug_match = re.search(r'got\s+([A-Za-z0-9_-]+)', msg.text, re.IGNORECASE)
+            if slug_match:
+                slug_name = slug_match.group(1).lower().strip(".!,")
+            else:
+                # fallback: take second word if "got" not found
+                slug_name = msg.text.strip().split()[2].lower()
+
             slugs = user_data.get("slugs", {})
             slugs[slug_name] = slugs.get(slug_name, 0) + 1
             user_data["slugs"] = slugs
