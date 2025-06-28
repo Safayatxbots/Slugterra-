@@ -69,6 +69,16 @@ REWARD_VALUES = {
     "slug": {"gems": 10, "coins": 20},
     "daily_limit": {"gems": 15, "coins": 30}
 }
+user_data = progress_table.get(UserQ.id == user_id)
+if not user_data:
+    user_data = {
+        "id": user_id,
+        "keys": 0,
+        "slugs": {},
+        "limit_done": False,
+        "message_hashes": [],
+        "completed_tasks": []
+    }
 
 # === Helpers ===
 def is_owner(user_id):
