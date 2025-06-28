@@ -69,17 +69,6 @@ REWARD_VALUES = {
     "slug": {"gems": 700, "coins": 30000},
     "daily_limit": {"gems": 1100, "coins": 80000}
 }
-progress_table = DB.table("progress")
-user_data = progress_table.get(UserQ.id == user_id)
-if not user_data:
-    user_data = {
-        "id": user_id,
-        "keys": 0,
-        "slugs": {},
-        "limit_done": False,
-        "message_hashes": [],
-        "completed_tasks": []
-    }
 
 # === Helpers ===
 def is_owner(user_id):
@@ -161,6 +150,19 @@ async def log_task_completion(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     await context.bot.send_message(chat_id=LOG_GROUP_ID, text=message, parse_mode="Markdown")
     updated = list(set(completed_before + new_completed))
     progress_table.update({"completed_tasks": updated}, UserQ.id == user_id)
+
+progress_table = DB.table("progress")
+user_data = progress_table.get(UserQ.id == user_id)
+if not user_data:
+    user_data = {
+        "id": user_id,
+        "keys": 0,
+        "slugs": {},
+        "limit_done": False,
+        "message_hashes": [],
+        "completed_tasks": []
+    }
+
 
 # === (continued below with rest of 424+ lines code...)
 # === /approve ===
