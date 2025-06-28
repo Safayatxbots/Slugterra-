@@ -12,29 +12,40 @@ BOT_TOKEN = "7803226404:AAGx-YvdgquS9qU3rzULa09zQBsoYgYUcjY"
 OWNER_ID = 6279412066
 ADMINS = [6279412066, 5903871499]  # Add other admin IDs here
 import json
-
 import os
 import json
-from tinydb import TinyDB
+import shutil
+from tinydb import TinyDB, Query
 
 DB_PATH = "datta.json"
 
-if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
-    with open(DB_PATH, "w") as f:
-        json.dump({}, f)
-else:
+# Step 1: Check for corruption or blank file
+def ensure_valid_db_file():
+    # If file doesn't exist or is empty
+    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+        with open(DB_PATH, "w") as f:
+            json.dump({}, f)
+        return
+
     try:
         with open(DB_PATH, "r") as f:
-            json.load(f)  # try to load it
-    except json.JSONDecodeError:
-        print("❌ datta.json is corrupted. Resetting...")
+            data = json.load(f)
+            if not isinstance(data, dict):
+                raise ValueError("Top-level JSON must be an object.")
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"❌ Invalid DB file: {e}")
+        backup_path = DB_PATH + ".bak"
+        shutil.move(DB_PATH, backup_path)
+        print(f"🔁 Old DB backed up to: {backup_path}")
         with open(DB_PATH, "w") as f:
             json.dump({}, f)
 
-DB = TinyDB(DB_PATH)
+# Step 2: Run the validation
+ensure_valid_db_file()
 
-# ✅ Safe to load after validation
+# Step 3: Now safely connect to DB
 DB = TinyDB(DB_PATH)
+UserQ = Query()
 
 import shutil
 
@@ -49,13 +60,9 @@ except json.JSONDecodeError:
 
 UserQ = Query()
 task_table = DB.table("tasks")
-global_table = DB.table("global_seen")
-LOG_GROUP_ID = -1002893931329
-REWARD_VALUES = {
-    "key": {"gems": 450, "coins": 10000},
-    "slug": {"gems": 1100, "coins": 80000},
-    "daily_limit": {"gems": 700, "coins": 30000},
-}
+today_task = task_table.get(UserQ.date == "2025-06-28") or {"date": "2025-06-28", "tasks": []}
+today_task["tasks"].append({"type": "key", "min": 5, "max": 10})
+task_table.upsert(today_task, UserQ.date == "2025-06-28")
 
 # === Helpers ===
 def is_owner(user_id):
