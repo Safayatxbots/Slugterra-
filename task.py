@@ -202,33 +202,34 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg = update.message
 
-    # 1. Ensure it's a forwarded message from @Slugterraa_bot
-    sender_username = (
-        msg.forward_from.username if msg.forward_from else
-        msg.forward_from_chat.username if msg.forward_from_chat else None
-    )
+    # 🛡 Safely get sender username (user or channel)
+    sender_username = None
+    if hasattr(msg, "forward_from") and msg.forward_from:
+        sender_username = msg.forward_from.username
+    elif hasattr(msg, "forward_from_chat") and msg.forward_from_chat:
+        sender_username = msg.forward_from_chat.username
 
-    if sender_username is None or sender_username.lower() != "slugterraa_bot":
+    if not sender_username or sender_username.lower() != "slugterraa_bot":
         return await msg.reply_text("❌ Message not from @Slugterraa_bot.")
+
     if not msg.text or not msg.forward_date:
         return await msg.reply_text("❌ Invalid forwarded message.")
 
-    # 2. Check if it's forwarded today
+    # ✅ Check if forwarded today
     today_utc = datetime.now(timezone.utc).date()
     if msg.forward_date.date() != today_utc:
         return await msg.reply_text("❌ Message is not from today.")
 
-    # 3. Generate unique message hash
+    # ✅ Generate message hash
     message_hash = hashlib.md5((msg.text + str(msg.forward_date)).encode()).hexdigest()
 
     progress_table = DB.table("progress")
     global_table = DB.table("global_seen")
 
-    # 4. Check if message already seen globally
     if global_table.contains(UserQ.hash == message_hash):
         return await msg.reply_text("❌ Message already used by another user.")
 
-    # 5. Get or initialize user profile
+    # ✅ Get or create user profile
     user_data = progress_table.get(UserQ.id == user_id)
     if not user_data:
         user_data = {
@@ -243,7 +244,7 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if message_hash in user_data.get("message_hashes", []):
         return await msg.reply_text("⚠️ You've already used this message.")
 
-    # 6. Detect and handle type of message
+    # ✅ Analyze message text
     text_lower = msg.text.lower()
     updated = False
 
@@ -268,7 +269,7 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text("✅ Daily limit marked as complete.")
         updated = True
 
-    # 7. Add hash to user and global seen list
+    # ✅ Mark message as seen
     user_data["message_hashes"] = user_data.get("message_hashes", []) + [message_hash]
 
     if updated:
