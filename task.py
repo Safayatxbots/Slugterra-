@@ -198,38 +198,38 @@ from telegram.ext import ContextTypes
 from datetime import datetime, timezone
 import hashlib
 
+from telegram import Update
+from telegram.ext import ContextTypes
+from datetime import datetime, timezone
+import hashlib
+
 async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg = update.message
 
-    # 🛡 Safely get sender username (user or channel)
-    sender_username = None
-    if hasattr(msg, "forward_from") and msg.forward_from:
-        sender_username = msg.forward_from.username
-    elif hasattr(msg, "forward_from_chat") and msg.forward_from_chat:
-        sender_username = msg.forward_from_chat.username
+    # ✅ Message must be forwarded
+    if not msg.forward_date:
+        return await msg.reply_text("❌ Please forward a message from @Slugterraa_bot.")
 
-    if not sender_username or sender_username.lower() != "slugterraa_bot":
-        return await msg.reply_text("❌ Message not from @Slugterraa_bot.")
+    if not msg.text:
+        return await msg.reply_text("❌ Forwarded message has no text.")
 
-    if not msg.text or not msg.forward_date:
-        return await msg.reply_text("❌ Invalid forwarded message.")
-
-    # ✅ Check if forwarded today
-    today_utc = datetime.now(timezone.utc).date()
-    if msg.forward_date.date() != today_utc:
+    # ✅ Must be today's message
+    today = datetime.now(timezone.utc).date()
+    if msg.forward_date.date() != today:
         return await msg.reply_text("❌ Message is not from today.")
 
-    # ✅ Generate message hash
+    # ✅ Generate a global hash
     message_hash = hashlib.md5((msg.text + str(msg.forward_date)).encode()).hexdigest()
 
     progress_table = DB.table("progress")
     global_table = DB.table("global_seen")
 
+    # ✅ Global check (to avoid reuse by others)
     if global_table.contains(UserQ.hash == message_hash):
-        return await msg.reply_text("❌ Message already used by another user.")
+        return await msg.reply_text("❌ This message has already been used by another user.")
 
-    # ✅ Get or create user profile
+    # ✅ Load or create user data
     user_data = progress_table.get(UserQ.id == user_id)
     if not user_data:
         user_data = {
@@ -241,36 +241,39 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "completed_tasks": []
         }
 
+    # ✅ Prevent user's own duplicate
     if message_hash in user_data.get("message_hashes", []):
         return await msg.reply_text("⚠️ You've already used this message.")
 
-    # ✅ Analyze message text
-    text_lower = msg.text.lower()
     updated = False
+    text_lower = msg.text.lower()
 
+    # ✅ Handle key
     if "you found a key" in text_lower:
         user_data["keys"] += 1
-        await msg.reply_text(f"✅ Key found! Total: {user_data['keys']}")
+        await msg.reply_text(f"✅ Key collected! Total: {user_data['keys']}")
         updated = True
 
+    # ✅ Handle slug
     elif "your luck is good you got" in text_lower:
         try:
             slug_name = msg.text.split("got", 1)[1].strip().split()[0].strip(".!").lower()
             slugs = user_data.get("slugs", {})
             slugs[slug_name] = slugs.get(slug_name, 0) + 1
             user_data["slugs"] = slugs
-            await msg.reply_text(f"✅ Slug found: {slug_name.capitalize()}")
+            await msg.reply_text(f"✅ Slug collected: {slug_name.capitalize()}")
             updated = True
         except Exception:
             await msg.reply_text("❌ Couldn't parse slug name.")
 
+    # ✅ Handle daily limit
     elif "daily limit reached" in text_lower:
         user_data["limit_done"] = True
-        await msg.reply_text("✅ Daily limit marked as complete.")
+        await msg.reply_text("✅ Daily limit marked as completed.")
         updated = True
 
-    # ✅ Mark message as seen
-    user_data["message_hashes"] = user_data.get("message_hashes", []) + [message_hash]
+    # ✅ Update hashes
+    user_data["message_hashes"].append(message_hash)
 
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
