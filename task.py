@@ -20,6 +20,7 @@ if os.path.exists(DB_PATH) and os.path.getsize(DB_PATH) == 0:
 DB = TinyDB(DB_PATH)
 UserQ = Query()
 task_table = DB.table("tasks")
+global_table = DB.table("global_seen")
 LOG_GROUP_ID = -1002893931329
 REWARD_VALUES = {
     "key": {"gems": 450, "coins": 10000},
@@ -160,12 +161,8 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg = update.message
 
-    # ✅ Log that a forwarded message was received
-    logging.info(f"Forwarded message from {user_id}: {msg.text}")
-
-    # ✅ Check if forwarded message is from bot or channel
+    # ✅ Check if it's a forwarded message from a valid source
     sender_username = None
-
     if msg.forward_from:
         sender_username = msg.forward_from.username
     elif msg.forward_from_chat:
@@ -183,25 +180,28 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not msg.forward_date:
         return await msg.reply_text("❌ Message has no forward_date.")
 
+    # ✅ Check if message is from today
     today_utc = datetime.now(timezone.utc).date()
     msg_date_utc = msg.forward_date.date()
-
     if msg_date_utc != today_utc:
         return await msg.reply_text("❌ Message is not from today.")
 
-    # ✅ Generate hash for de-duplication
+    # ✅ Generate global message hash
     message_hash = hashlib.md5((msg.text + str(msg.forward_date.date())).encode()).hexdigest()
     progress_table = DB.table("progress")
-    user_data = progress_table.get(UserQ.id == user_id)
+    global_table = DB.table("global_seen")
 
+    # ✅ Check if message hash already used globally
+    if global_table.contains(UserQ.hash == message_hash):
+        return await msg.reply_text("❌ This message has already been used by another user.")
+
+    # ✅ Fetch user progress data
+    user_data = progress_table.get(UserQ.id == user_id)
     if user_data:
         seen_hashes = user_data.get("message_hashes", [])
-        if message_hash in seen_hashes:
-            return await msg.reply_text("❌ Duplicate message. Already counted.")
-        seen_hashes.append(message_hash)
         current_count = user_data.get("keys", 0)
     else:
-        seen_hashes = [message_hash]
+        seen_hashes = []
         current_count = 0
         user_data = {"id": user_id, "slugs": {}, "message_hashes": seen_hashes}
 
@@ -230,11 +230,13 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         updated = True
         await msg.reply_text("✅ Daily limit marked as completed.")
 
-    user_data["message_hashes"] = seen_hashes
+    # ✅ Store hash to prevent reprocessing
+    user_data["message_hashes"] = seen_hashes + [message_hash]
 
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
-        await log_task_completion(context, user_id)
+        global_table.insert({"hash": message_hash})  # 💡 Global block
+        await log_task_completion(context, user_id))
 
 # === /settask1 (key task) ===
 async def settask1(update: Update, context: ContextTypes.DEFAULT_TYPE):
