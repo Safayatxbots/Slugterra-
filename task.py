@@ -236,7 +236,7 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
         global_table.insert({"hash": message_hash})  # 💡 Global block
-        await log_task_completion(context, user_id))
+        await log_task_completion(context, user_id)
 
 # === /settask1 (key task) ===
 async def settask1(update: Update, context: ContextTypes.DEFAULT_TYPE):
