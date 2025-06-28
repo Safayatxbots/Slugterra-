@@ -1,8 +1,22 @@
 {
-  "_default": {},
-  "approved": [],
-  "progress": [],
-  "tasks": [],
-  "global_seen": [],
-  "logs": []
+  "tasks": {
+    "1": {
+      "date": "2025-06-28",
+      "tasks": [
+        {
+          "type": "key",
+          "min": 5,
+          "max": 10
+        },
+        {
+          "type": "slug",
+          "name": "infurnus",
+          "count": 3
+        },
+        {
+          "type": "daily_limit"
+        }
+      ]
+    }
+  }
 }
