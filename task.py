@@ -207,33 +207,34 @@ from telegram.ext import ContextTypes
 async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = update.message
     if not msg:
-        return  # Ignore non-message updates
+        return
 
     user_id = update.effective_user.id
 
-    # ✅ Must be a forwarded message
+    # ✅ Must be a forwarded message with a timestamp
     if not getattr(msg, "forward_date", None):
         return await msg.reply_text("❌ Please forward a valid message from @Slugterraa_bot. It must show a timestamp.")
-    
+
+    # ✅ Must be a text message
     if not msg.text:
         return await msg.reply_text("❌ Forwarded message has no text.")
 
     # ✅ Ensure message is from today
     today = datetime.now(timezone.utc).date()
     if msg.forward_date.date() != today:
-        return await msg.reply_text("❌ Message is not from today. Send a fresh one from @Slugterraa_bot.")
+        return await msg.reply_text("❌ Message is not from today.")
 
-    # ✅ Create unique hash
+    # ✅ Generate a unique hash using message + timestamp
     message_hash = hashlib.md5((msg.text + str(msg.forward_date)).encode()).hexdigest()
 
     progress_table = DB.table("progress")
     global_table = DB.table("global_seen")
 
-    # ✅ Global hash check
+    # ✅ Global hash check (used by others)
     if global_table.contains(UserQ.hash == message_hash):
-        return await msg.reply_text("❌ This message was already used by another user.")
+        return await msg.reply_text("❌ This message has already been used by another user.")
 
-    # ✅ Load or create user data
+    # ✅ Get or create user data
     user_data = progress_table.get(UserQ.id == user_id)
     if not user_data:
         user_data = {
@@ -245,20 +246,20 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "completed_tasks": []
         }
 
-    # ✅ User's own duplicate check
+    # ✅ Local user duplicate check
     if message_hash in user_data.get("message_hashes", []):
         return await msg.reply_text("⚠️ You've already used this message.")
 
     updated = False
     text_lower = msg.text.lower()
 
-    # ✅ Key message detection
+    # ✅ Handle key detection
     if any(kw in text_lower for kw in ["you found a key", "🔑 while exploring", "obtained a key"]):
         user_data["keys"] += 1
         await msg.reply_text(f"✅ Key collected! Total: {user_data['keys']}")
         updated = True
 
-    # ✅ Slug detection
+    # ✅ Handle slug detection
     elif any(kw in text_lower for kw in ["your luck is good", "you got", "you found a slug"]):
         try:
             slug_match = re.search(r'got\s+([A-Za-z0-9_-]+)', msg.text, re.IGNORECASE)
@@ -275,16 +276,15 @@ async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             await msg.reply_text("❌ Couldn't parse slug name.")
 
-    # ✅ Daily limit message detection
+    # ✅ Handle daily limit detection
     elif "daily limit reached" in text_lower or "you can't explore more today" in text_lower:
         user_data["limit_done"] = True
         await msg.reply_text("✅ Daily limit marked as completed.")
         updated = True
 
-    # ✅ Add message hash to prevent reuse
+    # ✅ Add used message hash
     user_data["message_hashes"].append(message_hash)
 
-    # ✅ Save progress if updated
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
         global_table.insert({"hash": message_hash})
