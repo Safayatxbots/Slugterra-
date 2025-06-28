@@ -1,28 +1,8 @@
-# Create a clean template for TinyDB that includes an example task entry
-import json
-
-data_template = {
-    "_default": {},
-    "approved": [],
-    "tasks": [
-        {
-            "date": "2025-06-27",
-            "tasks": [
-                {
-                    "type": "key",
-                    "min": 1,
-                    "max": 2
-                }
-            ],
-            "completed_users": {}
-        }
-    ],
-    "progress": []
+{
+  "_default": {},
+  "approved": [],
+  "progress": [],
+  "tasks": [],
+  "global_seen": [],
+  "logs": []
 }
-
-file_path = "/mnt/data/data.json"
-
-with open(file_path, "w") as f:
-    json.dump(data_template, f, indent=2)
-
-file_path
