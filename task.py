@@ -13,29 +13,36 @@ OWNER_ID = 6279412066
 ADMINS = [6279412066, 5903871499]  # Add other admin IDs here
 import json
 
+import os
+import json
+from tinydb import TinyDB
+
 DB_PATH = "datta.json"
 
-# 🔒 Fix for empty or corrupt TinyDB file
 if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
     with open(DB_PATH, "w") as f:
         json.dump({}, f)
 else:
-    # Try reading it to ensure it's valid JSON
     try:
-        with open(DB_PATH) as f:
-            json.load(f)
+        with open(DB_PATH, "r") as f:
+            json.load(f)  # try to load it
     except json.JSONDecodeError:
         print("❌ datta.json is corrupted. Resetting...")
         with open(DB_PATH, "w") as f:
             json.dump({}, f)
+
+DB = TinyDB(DB_PATH)
 
 # ✅ Safe to load after validation
 DB = TinyDB(DB_PATH)
 
 import shutil
 
+try:
+    with open(DB_PATH, "r") as f:
+        json.load(f)
 except json.JSONDecodeError:
-    print("❌ datta.json is corrupted. Creating backup and resetting...")
+    print("❌ datta.json is corrupted. Backing up and resetting...")
     shutil.move(DB_PATH, DB_PATH + ".bak")
     with open(DB_PATH, "w") as f:
         json.dump({}, f)
