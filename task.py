@@ -64,6 +64,12 @@ today_task = task_table.get(UserQ.date == "2025-06-28") or {"date": "2025-06-28"
 today_task["tasks"].append({"type": "key", "min": 5, "max": 10})
 task_table.upsert(today_task, UserQ.date == "2025-06-28")
 
+REWARD_VALUES = {
+    "key": {"gems": 5, "coins": 10},
+    "slug": {"gems": 10, "coins": 20},
+    "daily_limit": {"gems": 15, "coins": 30}
+}
+
 # === Helpers ===
 def is_owner(user_id):
     return user_id == OWNER_ID
@@ -185,93 +191,78 @@ async def unapprove(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # === Handle Forwarded Slugterraa Messages with Hash Check ===
-import logging
-from telegram import Update
-from telegram.ext import ContextTypes
-from datetime import datetime, timezone
-import hashlib
-
-logging.basicConfig(level=logging.INFO)
-
 async def handle_forward(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     msg = update.message
 
-    # ✅ Check if it's a forwarded message from a valid source
-    sender_username = None
-    if msg.forward_from:
-        sender_username = msg.forward_from.username
-    elif msg.forward_from_chat:
-        sender_username = msg.forward_from_chat.username
+    sender_username = (
+        msg.forward_from.username if msg.forward_from else
+        msg.forward_from_chat.username if msg.forward_from_chat else None
+    )
 
-    if not sender_username:
-        return await msg.reply_text("❌ Not a valid forwarded message.")
-
-    if sender_username.lower() != "slugterraa_bot":
+    if sender_username is None or sender_username.lower() != "slugterraa_bot":
         return await msg.reply_text("❌ Message not from @Slugterraa_bot.")
+    if not msg.text or not msg.forward_date:
+        return await msg.reply_text("❌ Invalid forwarded message.")
 
-    if not msg.text:
-        return await msg.reply_text("❌ Forwarded message has no text.")
-
-    if not msg.forward_date:
-        return await msg.reply_text("❌ Message has no forward_date.")
-
-    # ✅ Check if message is from today
     today_utc = datetime.now(timezone.utc).date()
-    msg_date_utc = msg.forward_date.date()
-    if msg_date_utc != today_utc:
-        return await msg.reply_text("❌ Message is not from today.")
+    if msg.forward_date.date() != today_utc:
+        return await msg.reply_text("❌ Message not from today.")
 
-    # ✅ Generate global message hash
-    message_hash = hashlib.md5((msg.text + str(msg.forward_date.date())).encode()).hexdigest()
-    progress_table = DB.table("progress")
+    # ✅ Create unique hash
+    message_hash = hashlib.md5((msg.text + str(msg.forward_date)).encode()).hexdigest()
     global_table = DB.table("global_seen")
+    progress_table = DB.table("progress")
 
-    # ✅ Check if message hash already used globally
     if global_table.contains(UserQ.hash == message_hash):
-        return await msg.reply_text("❌ This message has already been used by another user.")
+        return await msg.reply_text("❌ Message already used by another user.")
 
-    # ✅ Fetch user progress data
+    # Get or create user profile
     user_data = progress_table.get(UserQ.id == user_id)
-    if user_data:
-        seen_hashes = user_data.get("message_hashes", [])
-        current_count = user_data.get("keys", 0)
-    else:
-        seen_hashes = []
-        current_count = 0
-        user_data = {"id": user_id, "slugs": {}, "message_hashes": seen_hashes}
+    if not user_data:
+        user_data = {
+            "id": user_id,
+            "keys": 0,
+            "slugs": {},
+            "limit_done": False,
+            "message_hashes": [],
+            "completed_tasks": []
+        }
 
+    if message_hash in user_data.get("message_hashes", []):
+        return await msg.reply_text("⚠️ You've already used this message.")
+
+    # 🧠 Analyze message
     updated = False
     text_lower = msg.text.lower()
 
     if "you found a key" in text_lower:
-        current_count += 1
-        user_data["keys"] = current_count
+        user_data["keys"] += 1
+        await msg.reply_text(f"✅ Key found! Total: {user_data['keys']}")
         updated = True
-        await msg.reply_text(f"✅ {current_count} keys collected so far.")
 
     elif "your luck is good you got" in text_lower:
         try:
-            slug_name = msg.text.split("got", 1)[1].strip().split()[0].strip(".!")
+            slug_name = msg.text.split("got", 1)[1].strip().split()[0].strip(".!").lower()
             slugs = user_data.get("slugs", {})
-            slugs[slug_name.lower()] = slugs.get(slug_name.lower(), 0) + 1
+            slugs[slug_name] = slugs.get(slug_name, 0) + 1
             user_data["slugs"] = slugs
+            await msg.reply_text(f"✅ Slug found: {slug_name.capitalize()}")
             updated = True
-            await msg.reply_text(f"✅ Slug collected: {slug_name.capitalize()}")
         except Exception:
-            await msg.reply_text("❌ Failed to parse slug name.")
+            await msg.reply_text("❌ Couldn't parse slug name.")
 
     elif "daily limit reached" in text_lower:
         user_data["limit_done"] = True
+        await msg.reply_text("✅ Daily limit marked as complete.")
         updated = True
-        await msg.reply_text("✅ Daily limit marked as completed.")
 
-    # ✅ Store hash to prevent reprocessing
-    user_data["message_hashes"] = seen_hashes + [message_hash]
+    # Add hash
+    user_data["message_hashes"] = user_data.get("message_hashes", []) + [message_hash]
 
     if updated:
         progress_table.upsert(user_data, UserQ.id == user_id)
-        global_table.insert({"hash": message_hash})  # 💡 Global block
+        global_table.insert({"hash": message_hash})
         await log_task_completion(context, user_id)
 
 # === /settask1 (key task) ===
