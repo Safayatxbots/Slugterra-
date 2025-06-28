@@ -65,9 +65,9 @@ today_task["tasks"].append({"type": "key", "min": 5, "max": 10})
 task_table.upsert(today_task, UserQ.date == "2025-06-28")
 
 REWARD_VALUES = {
-    "key": {"gems": 5, "coins": 10},
-    "slug": {"gems": 10, "coins": 20},
-    "daily_limit": {"gems": 15, "coins": 30}
+    "key": {"gems": 450, "coins": 10000},
+    "slug": {"gems": 700, "coins": 30000},
+    "daily_limit": {"gems": 1100, "coins": 80000}
 }
 user_data = progress_table.get(UserQ.id == user_id)
 if not user_data:
